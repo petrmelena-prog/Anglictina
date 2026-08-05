@@ -1,0 +1,161 @@
+name: Anglicky telefonat
+
+# Pondeli, streda, patek. Cron je v UTC; skript si sam spocita prazsky cas
+# a zavola v nahodnou minutu mezi 18:00 a 20:50 - at uz je leto nebo zima.
+on:
+  schedule:
+    - cron: "0 16 * * 1,3,5"
+  workflow_dispatch:        # rucni spusteni tlacitkem "Run workflow"
+
+permissions:
+  contents: write           # aby si mohl zapsat historii hovoru
+
+jobs:
+  zavolej:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pockat na nahodny cas a zavolat
+        env:
+          XI_API_KEY: ${{ secrets.XI_API_KEY }}
+          AGENT_ID:   ${{ secrets.AGENT_ID }}
+          PHONE_ID:   ${{ secrets.PHONE_ID }}
+          TO_NUMBER:  ${{ secrets.TO_NUMBER }}
+          EVENT:      ${{ github.event_name }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, sys, json, time, random, datetime, zoneinfo
+          import urllib.request, urllib.error
+
+          TOPICS = [
+              "what he did last weekend",
+              "the last time he travelled abroad and what went wrong",
+              "how he got into his line of work",
+              "his morning routine and whether he's a morning person",
+              "a building or place he thinks is beautiful, and why",
+              "what he'd do with a free Saturday and no obligations",
+              "the weather this week and how it compares to normal",
+              "a meal he can cook, step by step",
+              "the car he drives and what he'd buy next",
+              "a problem on a construction site and how it got solved",
+              "his kids or family and what they're up to",
+              "a film or series he watched recently",
+              "how his town has changed in twenty years",
+              "explaining what his company actually does to someone who knows nothing",
+              "a deadline he nearly missed",
+              "sports — playing or watching",
+              "the best holiday he ever had",
+              "something he's fixed with his own hands",
+              "a client who was difficult, and how he handled it",
+              "what he eats for lunch on a normal workday",
+              "a piece of technology he refuses to use",
+              "how he'd describe Czech food to an American",
+              "choosing between two suppliers for a job",
+              "something he's learning or would like to learn",
+              "the difference between working for someone and running your own thing",
+              "a place in the world he's never been but wants to see",
+              "what he was like at eighteen",
+              "explaining a technical drawing over the phone",
+              "his experience with builders and tradesmen",
+              "how he relaxes after a hard week",
+              "a decision he'd make differently now",
+              "prices — what's got expensive lately",
+              "a mistake on a project and who paid for it",
+              "music he grew up with",
+              "what surprises foreigners about the Czech Republic",
+              "how he'd spend a million crowns on his house",
+              "negotiating a price he thought was too low",
+              "a neighbour story",
+              "whether he'd ever move abroad for work",
+              "something he's proud of finishing",
+              "how heating and insulation work in his own house",
+              "the last thing that made him laugh",
+              "planning a trip he hasn't taken yet",
+              "explaining a building permit process to someone abroad",
+              "a habit he'd like to break",
+              "coffee, beer, or something else — and why",
+              "what makes a good colleague",
+              "a storm, flood or accident he remembers",
+              "how he'd describe his own personality",
+              "software he uses every day and what annoys him about it",
+              "a childhood summer",
+              "giving directions to his office over the phone",
+              "what he'd change about his job",
+              "an animal or pet story",
+              "the first thing he'd show a visitor in his region",
+              "a book, podcast or video that changed how he thinks",
+              "how long things really take versus how long people think",
+              "something he collects, or used to",
+              "a moment he was really nervous",
+              "what he'd tell someone starting out in his field",
+          ]
+
+          KEY    = os.environ["XI_API_KEY"]
+          AGENT  = os.environ["AGENT_ID"]
+          PHONE  = os.environ["PHONE_ID"]
+          TO     = os.environ["TO_NUMBER"]
+          MANUAL = os.environ.get("EVENT") == "workflow_dispatch"
+
+          PRAHA = zoneinfo.ZoneInfo("Europe/Prague")
+          now = datetime.datetime.now(PRAHA)
+          print("Prazsky cas ted:", now.strftime("%Y-%m-%d %H:%M"), flush=True)
+
+          if MANUAL:
+              print("Rucni spusteni - volam hned.", flush=True)
+          else:
+              start = now.replace(hour=18, minute=0, second=0, microsecond=0)
+              end   = now.replace(hour=20, minute=50, second=0, microsecond=0)
+              span  = max(int((end - start).total_seconds() // 60), 0)
+              cil   = start + datetime.timedelta(minutes=random.randint(0, span))
+              cekat = (cil - now).total_seconds()
+              if cekat > 0:
+                  print("Zavolam v %s - cekam %d minut." % (cil.strftime("%H:%M"), cekat // 60), flush=True)
+                  time.sleep(cekat)
+              else:
+                  print("Okno uz zacalo - volam hned.", flush=True)
+
+          tema = random.choice(TOPICS)
+          print("Tema hovoru:", tema, flush=True)
+
+          telo = json.dumps({
+              "agent_id": AGENT,
+              "agent_phone_number_id": PHONE,
+              "to_number": TO,
+              "conversation_initiation_client_data": {
+                  "dynamic_variables": {"topic": tema}
+              },
+          }).encode("utf-8")
+
+          req = urllib.request.Request(
+              "https://api.elevenlabs.io/v1/convai/twilio/outbound-call",
+              data=telo, method="POST",
+              headers={"xi-api-key": KEY, "Content-Type": "application/json"})
+
+          try:
+              with urllib.request.urlopen(req, timeout=40) as r:
+                  print("OK", r.status, r.read().decode("utf-8", "replace")[:400], flush=True)
+          except urllib.error.HTTPError as e:
+              print("CHYBA", e.code, e.read().decode("utf-8", "replace")[:800], file=sys.stderr, flush=True)
+              print("Nejcastejsi priciny: v Twiliu neni povolena Ceska republika "
+                    "(Voice / Settings / Geographic Permissions), vycerpany kredit u Twilia, "
+                    "nebo zneplatneny API klic.", file=sys.stderr, flush=True)
+              sys.exit(1)
+
+          # Zapis do historie. Zaroven tim commit drzi repozitar zivy,
+          # aby GitHub po 60 dnech neaktivity rozvrh sam nevypnul.
+          with open("historie.md", "a", encoding="utf-8") as f:
+              f.write("- %s - %s\n" % (datetime.datetime.now(PRAHA).strftime("%d.%m.%Y %H:%M"), tema))
+          PYEOF
+
+      - name: Zapsat historii hovoru
+        if: always()
+        run: |
+          git config user.name  "Kalifornan"
+          git config user.email "actions@github.com"
+          touch historie.md
+          git add historie.md
+          git diff --staged --quiet || git commit -m "Telefonat"
+          git push || true
