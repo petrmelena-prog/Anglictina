@@ -1,2 +1,3 @@
 - 05.08.2026 13:40 - a decision he'd make differently now
 - 05.08.2026 20:31 - the last thing that made him laugh
+- 07.08.2026 18:53 - his experience with builders and tradesmen
