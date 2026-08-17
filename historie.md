@@ -4,3 +4,4 @@
 - 10.08.2026 18:52 - explaining what his company actually does to someone who knows nothing
 - 12.08.2026 18:56 - a mistake on a project and who paid for it
 - 14.08.2026 18:50 - planning a trip he hasn't taken yet
+- 17.08.2026 18:25 - what surprises foreigners about the Czech Republic
