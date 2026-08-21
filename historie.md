@@ -6,3 +6,4 @@
 - 14.08.2026 18:50 - planning a trip he hasn't taken yet
 - 17.08.2026 18:25 - what surprises foreigners about the Czech Republic
 - 19.08.2026 20:48 - something he's learning or would like to learn
+- 21.08.2026 18:34 - giving directions to his office over the phone
